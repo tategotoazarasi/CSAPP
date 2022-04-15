@@ -206,7 +206,12 @@ int negate(int x) {
  *   Max ops: 15
  *   Rating: 3
  */
-int isAsciiDigit(int x) { return 2; }
+int isAsciiDigit(int x) {
+	int a   = !((x >> 4) ^ 3);// 1 if x is a digit, 0 otherwise
+	int i3  = (x >> 3) & 1;   // 3
+	int i12 = x & 6;
+	return a & ((!i3) | (i3 & !(i12)));
+}
 /*
  * conditional - same as x ? y : z
  *   Example: conditional(2,4,5) = 4
