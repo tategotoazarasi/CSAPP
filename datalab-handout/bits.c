@@ -318,7 +318,48 @@ unsigned floatScale2(unsigned uf) {
  *   Max ops: 30
  *   Rating: 4
  */
-int floatFloat2Int(unsigned uf) { return 2; }
+int floatFloat2Int(unsigned uf) {
+	int pos   = uf >> 31;
+	int i     = 1 << 23;
+	int n     = 8;
+	int count = 0;
+	int ans;
+	unsigned int frac;
+	while(n--) {
+		count += !!(uf & i);
+		i <<= 1;
+	}
+	if(count == 8) {
+		return 0x80000000u;
+	}
+	if(count == 0) {
+		return 0;
+	}
+	count = uf >> 23;
+	count = ~count;
+	count |= 1 << 8;
+	count = ~count;
+	count -= 127;
+	if(count < 0) {
+		return 0;
+	}
+	if(count >= 32) {
+		return 0x80000000u;
+	}
+	frac = uf << 8;
+	frac |= 1 << 31;
+	n = 31 - count;
+	while(n > 0) {
+		frac >>= 1;
+		n--;
+	}
+	if(!pos) {
+		ans = frac;
+	} else {
+		ans = ~frac + 1;
+	}
+	return ans;
+}
 /*
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
  *   (2.0 raised to the power x) for any 32-bit integer x.
