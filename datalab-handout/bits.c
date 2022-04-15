@@ -270,7 +270,10 @@ int logicalNeg(int x) {
  *  Max ops: 90
  *  Rating: 4
  */
-int howManyBits(int x) { return 0; }
+int howManyBits(int x) {
+	///TODO
+	return 0;
+}
 // float
 /*
  * floatScale2 - Return bit-level equivalent of expression 2*f for
@@ -283,7 +286,26 @@ int howManyBits(int x) { return 0; }
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatScale2(unsigned uf) { return 2; }
+unsigned floatScale2(unsigned uf) {
+	int i     = 1 << 23;
+	int n     = 8;
+	int count = 0;
+	while(n--) {
+		count += !!(uf & i);
+		i <<= 1;
+	}
+	if(count == 8) {
+		return uf;
+	}
+	if(count == 0) {
+		int p = uf >> 31;
+		uf <<= 1;
+		uf |= p << 31;
+		return uf;
+	}
+	uf += 1 << 23;
+	return uf;
+}
 /*
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
  *   for floating point argument f.
