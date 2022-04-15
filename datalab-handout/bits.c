@@ -179,7 +179,14 @@ int isTmax(int x) {
  *   Max ops: 12
  *   Rating: 2
  */
-int allOddBits(int x) { return 2; }
+int allOddBits(int x) {
+	int mask = 170;
+	int a;
+	mask = mask << 8 | mask;
+	mask = mask << 16 | mask;
+	a    = x & mask;
+	return !(((a) | (a >> 1)) + 1);
+}
 /*
  * negate - return -x
  *   Example: negate(1) = -1.
