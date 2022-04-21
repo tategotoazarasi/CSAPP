@@ -373,4 +373,17 @@ int floatFloat2Int(unsigned uf) {
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatPower2(int x) { return 2; }
+unsigned floatPower2(int x) {
+	int exp = x + 127;
+	if(0 < exp && exp < ((1 << 8) - 1)) {
+		unsigned ans = exp << 23;
+		return ans;
+	}
+	if(exp >= ((1 << 8) - 1)) {
+		return 0x7F800000;//INF
+	}
+	if(exp == 0) {
+		return 1 << (x + 127);
+	}
+	return 0;
+}
