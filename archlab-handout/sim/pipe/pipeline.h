@@ -23,21 +23,18 @@
 /* BUBBLE: Set current state to nop     */
 /* ERROR:  Occurs when both stall & load signals set */
 
-typedef enum { P_LOAD,
-	           P_STALL,
-	           P_BUBBLE,
-	           P_ERROR } p_stat_t;
+typedef enum { P_LOAD, P_STALL, P_BUBBLE, P_ERROR } p_stat_t;
 
 typedef struct {
-	/* Current and next register state */
-	void *current;
-	void *next;
-	/* Contents of register when bubble occurs */
-	void *bubble_val;
-	/* Number of state bytes */
-	int count;
-	/* How should state be updated next time? */
-	p_stat_t op;
+    /* Current and next register state */
+    void *current;
+    void *next;
+    /* Contents of register when bubble occurs */
+    void *bubble_val;
+    /* Number of state bytes */
+    int count;
+    /* How should state be updated next time? */
+    p_stat_t op;
 } pipe_ele, *pipe_ptr;
 
 /******************************************************************************
@@ -65,3 +62,6 @@ void wstring(uword_t x, int bpd, int bpw, char *s);
 /******************************************************************************/
 
 #endif /* PIPE_H */
+
+
+

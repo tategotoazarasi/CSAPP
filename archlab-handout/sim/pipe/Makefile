@@ -24,6 +24,7 @@ TKINC=-isystem /usr/include/tcl8.5
 
 CC=gcc
 CFLAGS=-Wall -O2
+LCFLAGS=-O1 -fcommon
 
 ##################################################
 # You shouldn't need to modify anything below here
@@ -41,7 +42,7 @@ all: psim drivers
 psim: psim.c sim.h pipe-$(VERSION).hcl $(MISCDIR)/isa.c $(MISCDIR)/isa.h
 	# Building the pipe-$(VERSION).hcl version of PIPE
 	$(HCL2C) -n pipe-$(VERSION).hcl < pipe-$(VERSION).hcl > pipe-$(VERSION).c
-	$(CC) $(CFLAGS) $(INC) -o psim psim.c pipe-$(VERSION).c \
+	$(CC) $(LCFLAGS) $(CFLAGS) $(INC) -o psim psim.c pipe-$(VERSION).c \
 		$(MISCDIR)/isa.c $(LIBS)
 
 # This rule builds driver programs for Part C of the Architecture Lab
