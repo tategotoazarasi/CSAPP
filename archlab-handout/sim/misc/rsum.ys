@@ -1,0 +1,27 @@
+irmovq 0x100, %rsp
+irmovq ele1, %rdi
+call rsum_list
+rsum_list:
+    xorq %rax, %rax
+    andq %rdi, %rdi
+    je end_rsum_list             # else
+    mrmovq (%rdi), %r8           # r8 : val
+    mrmovq 8(%rdi), %rdi         # ls->next
+    pushq %r8
+    call rsum_list
+    popq %r8
+    addq %r8, %rax               # return val + rest
+    ret
+end_rsum_list:                   # if(!ls)
+    ret
+# Sample linked list
+    .align 8
+ele1:
+    .quad 0x00a
+    .quad ele2
+ele2:
+    .quad 0x0b0
+    .quad ele3
+ele3:
+    .quad 0xc00
+    .quad 0
