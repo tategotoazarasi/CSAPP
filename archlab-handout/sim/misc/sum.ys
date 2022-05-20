@@ -1,0 +1,25 @@
+irmovq 0x100, %rsp
+irmovq ele1, %rdi
+call sum_list
+sum_list:
+    irmovq 0, %rax
+loop:
+    andq %rdi, %rdi
+    je end_loop             #if rdi is 0, jump to end_loop
+    mrmovq (%rdi), %r8
+    addq %r8, %rax
+    mrmovq 8(%rdi), %rdi
+    jmp loop
+end_loop:
+    ret
+# Sample linked list
+    .align 8
+ele1:
+    .quad 0x00a
+    .quad ele2
+ele2:
+    .quad 0x0b0
+    .quad ele3
+ele3:
+    .quad 0xc00
+    .quad 0
