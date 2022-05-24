@@ -802,10 +802,6 @@ void sim_log( const char *format, ... ) {
  * Begin Part 3 globals	
  **********************/
 
-/* Hack for SunOS */
-extern int matherr();
-int *tclDummyMathPtr = (int *) matherr;
-
 static char tcl_msg[256];
 
 /* Keep track of the TCL Interpreter */
