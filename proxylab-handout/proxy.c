@@ -1,9 +1,30 @@
 #include "csapp.h"
+#include <limits.h>
+#include <semaphore.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
+
+struct cache_object {
+	unsigned long seq;
+	unsigned index;
+	char uri[MAXLINE];
+	char buf[MAX_CACHE_SIZE];
+	int buf_len;
+};
+
+struct cache {
+	unsigned long next_seq;
+	struct cache_object *objects[MAX_OBJECT_SIZE];
+	sem_t locks[MAX_OBJECT_SIZE];
+} cache;
+
+struct cache_object *get_cache(char *uri);
+
+unsigned str_hash(char *str, int n);
 
 struct uri {
 	char scheme[MAXLINE];
@@ -13,10 +34,10 @@ struct uri {
 };
 
 void *doit(void *vargp);
-void read_requesthdrs(rio_t *rp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
 struct uri *parse_uri(char *uri);
+void cache_insert(char *uri, char *buf, int buf_n);
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr =
@@ -24,6 +45,10 @@ static const char *user_agent_hdr =
         "Firefox/10.0.3\r\n";
 
 int main(int argc, char **argv) {
+	cache.next_seq = 0;
+	for(int i = 0; i < MAX_OBJECT_SIZE; i++) {
+		sem_init(&cache.locks[i], 0, 1);
+	}
 	printf("%s", user_agent_hdr);
 	int listenfd;
 	int *connfdp;
@@ -59,27 +84,33 @@ void *doit(void *vargp) {
 	Pthread_detach(pthread_self());
 	Free(vargp);
 
-	struct stat sbuf;
 	char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-	char filename[MAXLINE], cgiargs[MAXLINE];
 	rio_t rio;
 
 	/* Read request line and headers */
 	Rio_readinitb(&rio, fd);
 	if(!Rio_readlineb(&rio, buf, MAXLINE))// line:netp:doit:readrequest
-		return;
+		return NULL;
 	printf("%s", buf);
 	sscanf(buf, "%s %s %s", method, uri, version);// line:netp:doit:parserequest
 	if(strcasecmp(method, "GET")) {               // line:netp:doit:beginrequesterr
 		clienterror(fd, method, "501", "Not Implemented",
 		            "Tiny does not implement this method");
-		return;
+		return NULL;
 	}// line:netp:doit:endrequesterr
+	struct cache_object *co = get_cache(uri);
+	if(co != NULL) {
+		printf("cache hit for %s\n", uri);
+		Rio_writen(fd, co->buf, co->buf_len);
+		V(&cache.locks[co->index]);
+		Close(fd);
+		return NULL;
+	}
 	struct uri *s_uri = parse_uri(uri);
 	if(s_uri == NULL) {
 		clienterror(fd, method, "400", "Bad Request",
 		            "");
-		return;
+		return NULL;
 	}
 
 	rio_t rio_out;
@@ -131,10 +162,22 @@ void *doit(void *vargp) {
 		}
 	}
 	int n = 0;
+	char cache_buf[MAX_CACHE_SIZE];
+	unsigned off = 0;
+	int flag     = 1;
 	while((n = rio_readlineb(&rio_out, buf_out, MAXLINE)) != 0) {
 		rio_writen(fd, buf_out, n);
+		if(flag && off + n < MAX_CACHE_SIZE) {
+			memcpy(cache_buf + off, buf_out, n);
+			off += n;
+		} else {
+			flag = 0;
+		}
 	}
 	Close(fd);
+	if(flag) {
+		cache_insert(uri, cache_buf, off);
+	}
 	return NULL;
 }
 
@@ -142,12 +185,7 @@ struct uri *parse_uri(char *uri) {
 	struct uri *ret = (struct uri *) malloc(sizeof(struct uri));
 	int flag        = 1;
 	int n           = strlen(uri);
-	if(n > 0) {
-		if(uri[n - 1] != '/') {
-			uri[n]     = '/';
-			uri[n + 1] = '\0';
-		}
-	} else {
+	if(n <= 0) {
 		free(ret);
 		return NULL;
 	}
@@ -180,7 +218,7 @@ struct uri *parse_uri(char *uri) {
 	i    = j;
 	flag = 1;
 	for(; j < n; j++) {
-		if(uri[j] == ':' || uri[j] == '/') {
+		if(uri[j] == ':' || uri[j] == '/' || j + 1 == n) {
 			memcpy(ret->host, uri + i, j - i);
 			ret->host[j - i] = '\0';
 			flag             = 0;
@@ -196,7 +234,7 @@ struct uri *parse_uri(char *uri) {
 		i    = j;
 		flag = 1;
 		for(; j < n; j++) {
-			if(uri[j] == '/') {
+			if(uri[j] == '/' || j + 1 == n) {
 				memcpy(ret->port, uri + i, j - i);
 				ret->port[j - i] = '\0';
 				flag             = 0;
@@ -216,23 +254,6 @@ struct uri *parse_uri(char *uri) {
 	ret->path[j - i] = '\0';
 	return ret;
 }
-
-/*
- * read_requesthdrs - read HTTP request headers
- */
-/* $begin read_requesthdrs */
-void read_requesthdrs(rio_t *rp) {
-	char buf[MAXLINE];
-
-	Rio_readlineb(rp, buf, MAXLINE);
-	printf("%s", buf);
-	while(strcmp(buf, "\r\n")) {// line:netp:readhdrs:checkterm
-		Rio_readlineb(rp, buf, MAXLINE);
-		printf("%s", buf);
-	}
-	return;
-}
-/* $end read_requesthdrs */
 
 /*
  * clienterror - returns an error message to the client
@@ -263,3 +284,76 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
 	Rio_writen(fd, buf, strlen(buf));
 }
 /* $end clienterror */
+
+unsigned str_hash(char *str, int n) {
+	unsigned long ans = 0;
+	for(int i = 0; i < n; i++) {
+		ans <<= 7;
+		ans += str[i];
+	}
+	printf("hash for %s is %u\n", str, (unsigned) (ans % MAX_OBJECT_SIZE));
+	return (unsigned) (ans % MAX_OBJECT_SIZE);
+}
+
+struct cache_object *get_cache(char *uri) {
+	printf("getting cache for %s\n", uri);
+	unsigned h = str_hash(uri, strlen(uri));
+	for(int i = 0; i < MAX_OBJECT_SIZE; i++) {
+		printf("current h = %u\n", h);
+		P(&cache.locks[h]);
+		if(cache.objects[h] == NULL) {
+			printf("get_cache: cache miss\n");
+			V(&cache.locks[h]);
+			return NULL;
+		}
+		printf("this uri = %s\n", cache.objects[h]->uri);
+		if(strcmp(cache.objects[h]->uri, uri) == 0) {
+			//V(&cache.locks[h]); //release after handling return
+			printf("get_cache: cache hit\n");
+			return cache.objects[h];
+		}
+		V(&cache.locks[h]);
+		h++;
+		h %= MAX_OBJECT_SIZE;
+	}
+}
+
+void cache_insert(char *uri, char *buf, int buf_n) {
+	printf("start cache_insert for %s\n", uri);
+	unsigned h = str_hash(uri, strlen(uri));
+
+	struct cache_object *co = (struct cache_object *) malloc(sizeof(struct cache_object));
+	co->seq                 = cache.next_seq++;
+	co->buf_len             = buf_n;
+	memcpy(co->uri, uri, strlen(uri));
+	memcpy(co->buf, buf, buf_n);
+
+	struct cache_object *to_evict;
+	for(int i = 0; i < MAX_OBJECT_SIZE; i++) {
+		int flag = 1;
+		P(&cache.locks[h]);
+		if(cache.objects[h] == NULL) {
+			cache.objects[h] = co;
+			co->index        = h;
+			printf("cache for %s inserted to %u\n", uri, h);
+			V(&cache.locks[h]);
+			return;
+		} else {
+			if(to_evict == NULL) {
+				to_evict = cache.objects[h];
+			} else if(cache.objects[h]->seq < to_evict->seq) {
+				V(&cache.locks[to_evict->index]);
+				to_evict = cache.objects[h];
+				flag     = 0;
+			}
+		}
+		if(flag) {
+			V(&cache.locks[h]);
+		}
+		h++;
+		h %= MAX_OBJECT_SIZE;
+	}
+	cache.objects[to_evict->index] = co;
+	V(&cache.locks[to_evict->index]);
+	free(to_evict);
+}
